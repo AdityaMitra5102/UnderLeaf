@@ -271,14 +271,66 @@
             color: #888;
             font-size: 12px;
         }
+        
+        /* Add these to your <style> section */
+.file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+}
+
+/* Context Menu Styling */
+#context-menu {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    background: #252526;
+    border: 1px solid #454545;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    padding: 5px 0;
+    min-width: 150px;
+    border-radius: 4px;
+}
+
+.menu-item {
+    padding: 8px 15px;
+    cursor: pointer;
+    color: #cccccc;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.menu-item:hover {
+    background-color: #094771;
+    color: white;
+}
+
+.menu-item.delete {
+    color: #f48771;
+}
+
+.menu-item.delete:hover {
+    background-color: #902727;
+    color: white;
+}
+
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
 </head>
 <body>
+<div id="context-menu">
+    <div class="menu-item" id="ctx-rename">✏️ Rename</div>
+    <div class="menu-item delete" id="ctx-delete">🗑️ Delete</div>
+</div>
     <div id="menubar">
         <div id="product-name">UnderLeaf</div>
         <button id="new-project-btn">New Project</button>
         <button id="new-file-btn" disabled>New File</button>
         <button id="upload-file-btn" disabled>Upload File</button>
+        <button id="upload-zip-btn" disabled>Upload Zip</button>
         <button id="save-btn" disabled>Save (Ctrl+S)</button>
         <button id="compile-btn" disabled>Compile to PDF</button>
         <button id="version-history-btn" disabled>Version History</button>
@@ -294,10 +346,16 @@
 
         <div id="editor-pane">
             <div id="editor-header">
-                <span id="current-file">No file selected</span>
-                <span id="save-status"></span>
-            </div>
-            <textarea id="editor" placeholder="Select a file to edit..."></textarea>
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <span id="current-file">No file selected</span>
+        <div id="file-actions-header" style="display: none; gap: 5px;">
+            <button class="action-btn rename" onclick="triggerRenameFromHeader()" title="Rename File" style="padding: 2px 8px; background: #3e3e42;">✏️ Rename</button>
+            <button class="action-btn delete" onclick="triggerDeleteFromHeader()" title="Delete File" style="padding: 2px 8px; background: #902727;">🗑️ Delete</button>
+        </div>
+    </div>
+    <span id="save-status"></span>
+</div>
+<div id="editor" style="flex: 1; width: 100%;"></div>
             <div id="binary-view"></div>
         </div>
 
@@ -340,6 +398,77 @@
         document.getElementById('version-history-btn').addEventListener('click', showVersionHistory);
         document.getElementById('download-btn').addEventListener('click', downloadRepo);
         document.getElementById('share-btn').addEventListener('click', shareRepo);
+        document.getElementById('upload-zip-btn').addEventListener('click', showZipUploadModal);
+
+let monacoEditor;
+
+// Initialize Monaco
+require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+require(['vs/editor/editor.main'], function () {
+    monacoEditor = monaco.editor.create(document.getElementById('editor'), {
+        value: '',
+        language: 'latex',
+        theme: 'vs-dark',
+        automaticLayout: true,
+        fontSize: 14,
+        minimap: { enabled: false }
+    });
+monaco.languages.setMonarchTokensProvider('latex', {
+    tokenizer: {
+        root: [
+            [/\\section/, 'keyword'],
+            [/\\begin|\\end/, 'keyword'],
+            [/\{|\}/, 'delimiter'],
+            [/\%.*/, 'comment'],
+            [/\\./, 'keyword']
+        ]
+    }
+});
+    // Handle content changes
+    monacoEditor.onDidChangeModelContent(() => {
+        unsavedChanges = true;
+        updateSaveStatus();
+        
+        clearTimeout(window.autoCompileTimeout);
+        window.autoCompileTimeout = setTimeout(() => {
+            if (currentFile && isTextFile) autoCompile();
+        }, 2000);
+    });
+
+    // Define custom Autocomplete for LaTeX
+    monaco.languages.registerCompletionItemProvider('latex', {
+        provideCompletionItems: (model, position) => {
+            const suggestions = [
+                {
+                    label: '\\begin',
+                    kind: monaco.languages.CompletionItemKind.Snippet,
+                    insertText: 'begin{${1:env}}\n\t$0\n\\end{${1:env}}',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: 'Environment block'
+                },
+                {
+                    label: '\\section',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'section{${1:title}}',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                },
+                {
+                    label: '\\textbf',
+                    kind: monaco.languages.CompletionItemKind.Function,
+                    insertText: 'textbf{${1:text}}',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                },
+                {
+                    label: '\\usepackage',
+                    kind: monaco.languages.CompletionItemKind.Module,
+                    insertText: 'usepackage{${1:package}}',
+                    insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+                }
+            ];
+            return { suggestions: suggestions };
+        }
+    });
+});
 
         editor.addEventListener('input', () => {
             unsavedChanges = true;
@@ -513,6 +642,7 @@
             document.getElementById('version-history-btn').disabled = false;
             document.getElementById('download-btn').disabled = false;
             document.getElementById('share-btn').disabled = false;
+            document.getElementById('upload-zip-btn').disabled = false;
             
             closeModal();
             await loadFileTree();
@@ -539,6 +669,64 @@
             }
         }
 
+function showZipUploadModal() {
+    const html = `
+        <h2>Upload Zip Archive</h2>
+        <p style="font-size: 12px; color: #888; margin-bottom: 10px;">
+            Files will be extracted to the root directory.
+        </p>
+        <div class="form-group">
+            <label>Select .zip file:</label>
+            <input type="file" id="zip-input" accept=".zip">
+        </div>
+        <div class="button-group">
+            <button id="confirm-zip-btn" onclick="uploadZip()">Upload & Extract</button>
+            <button onclick="closeModal()">Cancel</button>
+        </div>
+    `;
+    showModal(html);
+}
+
+window.uploadZip = async function() {
+    const input = document.getElementById('zip-input');
+    const file = input.files[0];
+    if (!file) {
+        alert('Please select a zip file');
+        return;
+    }
+
+    const btn = document.getElementById('confirm-zip-btn');
+    btn.disabled = true;
+    btn.textContent = 'Uploading...';
+
+    try {
+        const base64Content = await readFileAsBase64(file);
+        const response = await fetch('/api/upload-zip', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                repo: currentRepo,
+                branch: currentBranch,
+                zip_data: base64Content
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            alert(`Successfully uploaded ${data.files_count} files.`);
+            closeModal();
+            await loadFileTree();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Upload failed: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Upload & Extract';
+    }
+};
+
         async function openFile(filepath) {
             // Re-enable editor if coming back from history mode
             if (!isHistoryMode) {
@@ -560,6 +748,7 @@
                 currentFile = filepath;
                 currentFileSha = data.sha;
                 currentFileSpan.textContent = filepath;
+                document.getElementById('file-actions-header').style.display = 'flex';
                 
                 if (data.type === 'binary') {
                     isTextFile = false;
@@ -586,8 +775,16 @@
                     isTextFile = true;
                     binaryView.style.display = 'none';
                     editor.style.display = 'block';
-                    editor.value = data.content;
-                    unsavedChanges = false;
+if (monacoEditor) {
+    monacoEditor.setValue(data.content);
+    // Auto-detect language by extension
+    const ext = filepath.split('.').pop().toLowerCase();
+    let lang = 'latex';
+    if (ext === 'md') lang = 'markdown';
+    if (ext === 'json') lang = 'json';
+    
+    monaco.editor.setModelLanguage(monacoEditor.getModel(), lang);
+}                    unsavedChanges = false;
                     
                     document.getElementById('save-btn').disabled = false;
                     document.getElementById('compile-btn').disabled = false;
@@ -618,7 +815,7 @@
                         repo: currentRepo,
                         branch: currentBranch,
                         filepath: currentFile,
-                        content: editor.value,
+                        content: monacoEditor.getValue(),
                         sha: currentFileSha
                     })
                 });
@@ -636,7 +833,29 @@
                 alert('Error saving file: ' + error.message);
             }
         }
+// Functions for the header buttons
+window.triggerRenameFromHeader = function() {
+    if (!currentFile || isHistoryMode) return;
+    showRenameModal(currentFile, currentFileSha);
+};
 
+window.triggerDeleteFromHeader = async function() {
+    if (!currentFile || isHistoryMode) return;
+    
+    // Perform delete using existing deleteFile logic
+    const success = await deleteFile(currentFile, currentFileSha);
+    
+    // If successful, reset the editor view
+    if (success) {
+        currentFile = null;
+        currentFileSha = null;
+        currentFileSpan.textContent = 'No file selected';
+        document.getElementById('file-actions-header').style.display = 'none';
+        if (monacoEditor) monacoEditor.setValue('');
+        binaryView.style.display = 'none';
+        editor.style.display = 'block';
+    }
+};
         async function compileFile() {
             if (!currentFile) return;
             
@@ -923,20 +1142,122 @@
                 const data = await response.json();
                 
                 fileTree.innerHTML = '';
-                
-                data.tree.forEach(item => {
-                    if (item.type === 'blob') {
-                        const div = document.createElement('div');
-                        div.className = 'file-item file';
-                        div.textContent = item.path;
-                        div.onclick = () => openFileAtCommit(item.path);
-                        fileTree.appendChild(div);
-                    }
-                });
-            } catch (error) {
+data.tree.forEach(item => {
+    if (item.type === 'blob') {
+        const div = document.createElement('div');
+        div.className = 'file-item file';
+        div.textContent = item.path;
+        
+        // Left click to open
+        div.onclick = () => isHistoryMode ? openFileAtCommit(item.path) : openFile(item.path);
+        
+        // Right click for context menu
+        div.oncontextmenu = (e) => {
+            if (isHistoryMode) return; // Disable in history mode
+            e.preventDefault();
+            showContextMenu(e, item.path, item.sha);
+        };
+        
+        fileTree.appendChild(div);
+    }
+});            } catch (error) {
                 fileTree.innerHTML = 'Error loading files';
             }
         }
+
+
+
+let contextTarget = { path: null, sha: null };
+
+function showContextMenu(e, path, sha) {
+    const menu = document.getElementById('context-menu');
+    contextTarget = { path, sha };
+    
+    menu.style.display = 'block';
+    menu.style.left = `${e.pageX}px`;
+    menu.style.top = `${e.pageY}px`;
+
+    // Close menu on click elsewhere
+    const closeMenu = () => {
+        menu.style.display = 'none';
+        document.removeEventListener('click', closeMenu);
+    };
+    
+    // Slight delay to prevent immediate closing
+    setTimeout(() => document.addEventListener('click', closeMenu), 10);
+}
+
+// Bind menu actions
+document.getElementById('ctx-rename').onclick = () => {
+    showRenameModal(contextTarget.path, contextTarget.sha);
+};
+
+document.getElementById('ctx-delete').onclick = () => {
+    deleteFile(contextTarget.path, contextTarget.sha);
+};
+
+// Also close menu if user scrolls the explorer
+document.getElementById('file-explorer').onscroll = () => {
+    document.getElementById('context-menu').style.display = 'none';
+};
+
+window.showRenameModal = function(oldPath, sha) {
+    const html = `
+        <h2>Rename File</h2>
+        <div class="form-group">
+            <label>New name for ${oldPath}:</label>
+            <input type="text" id="rename-path" value="${oldPath}">
+        </div>
+        <div class="button-group">
+            <button onclick="renameFile('${oldPath}', '${sha}')">Rename</button>
+            <button onclick="closeModal()">Cancel</button>
+        </div>
+    `;
+    showModal(html);
+};
+
+window.renameFile = async function(oldPath, sha) {
+    const newPath = document.getElementById('rename-path').value.trim();
+    if (!newPath || newPath === oldPath) return;
+
+    try {
+        const response = await fetch('/api/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                repo: currentRepo,
+                branch: currentBranch,
+                old_path: oldPath,
+                new_path: newPath,
+                sha: sha
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            closeModal();
+            await loadFileTree();
+        }
+    } catch (e) { alert('Rename failed: ' + e.message); }
+};
+
+window.deleteFile = async function(path, sha) {
+    if (!confirm(`Are you sure you want to delete ${path}?`)) return;
+
+    try {
+        const response = await fetch('/api/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                repo: currentRepo,
+                branch: currentBranch,
+                filepath: path,
+                sha: sha
+            })
+        });
+        const data = await response.json();
+        if (data.success) await loadFileTree();
+    } catch (e) { alert('Delete failed: ' + e.message); }
+};
 
         async function openFileAtCommit(filepath) {
             try {

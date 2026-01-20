@@ -1,34 +1,26 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    pandoc \
-    texlive-latex-base \
-    texlive-latex-extra \
-    texlive-fonts-recommended \
-    texlive-fonts-extra \
-    texlive-xetex \
-    && rm -rf /var/lib/apt/lists/*
+# 1. Install basics (no GPG needed here)
+RUN apt-get update && apt-get install -y curl ca-certificates perl ghostscript git pandoc
 
-# Set working directory
+# 2. Add MiKTeX repo with [trusted=yes] to skip GPG verification
+RUN echo "deb [trusted=yes] https://miktex.org/download/debian bookworm universe" \
+    > /etc/apt/sources.list.d/miktex.list
+
+# 3. Install MiKTeX (adding --allow-unauthenticated as a backup)
+RUN apt-get update && \
+    apt-get install -y --allow-unauthenticated miktex
+
+# 4. Finish Setup
+RUN miktexsetup finish && \
+    initexmf --admin --set-config-value [MPM]AutoInstall=1
+
 WORKDIR /app
-
-# Copy requirements
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
+# 5. Copy App Code
 COPY . .
 
-# Expose port
-EXPOSE 5000
-
-# Set environment variables
-ENV FLASK_APP=flaskapp.py
-ENV PYTHONUNBUFFERED=1
-
-# Run the application
-CMD ["python", "flaskapp.py"]
+# Run the application with gunicorn
+CMD gunicorn --bind 0.0.0.0:${PORT:-5000}  flaskapp:app

@@ -7,6 +7,8 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from requests_oauthlib import OAuth2Session
 import requests
 import base64
+import zipfile
+import io
 
 # Allow OAuth over HTTP for local development (REMOVE IN PRODUCTION)
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
@@ -34,8 +36,9 @@ if os.name == 'nt':  # Windows
         print(f"MikTeX configuration skipped: {e}")
         pass  # MikTeX might not be installed or configured
 # GitHub OAuth settings
-CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
-CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
+# GitHub OAuth settings
+CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', 'Ov23liZ0MpNVP80jwhk9')
+CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', '06d97b6b9b83225862dfe782b01f797b9bcd9b6b')
 
 AUTHORIZATION_BASE_URL = 'https://github.com/login/oauth/authorize'
 TOKEN_URL = 'https://github.com/login/oauth/access_token'
@@ -349,6 +352,90 @@ def compile_file():
         # Cleanup
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+@app.route('/api/upload-zip', methods=['POST'])
+def upload_zip():
+    if 'oauth_token' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.json
+    repo = data['repo']
+    branch = data['branch']
+    zip_data = data['zip_data']
+    
+    headers = {'Authorization': f"token {session['oauth_token']}"}
+    
+    try:
+        # 1. Decode and unzip in memory
+        zip_bytes = base64.b64decode(zip_data)
+        z = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        
+        # 2. Get current branch SHA
+        ref_res = requests.get(f'https://api.github.com/repos/{repo}/git/ref/heads/{branch}', headers=headers)
+        base_sha = ref_res.json()['object']['sha']
+        
+        # 3. Create Blobs for each file
+        tree_items = []
+        files_processed = 0
+        
+        for file_info in z.infolist():
+            if file_info.is_dir():
+                continue
+                
+            with z.open(file_info) as f:
+                content = f.read()
+                # Handle both text and binary files via base64
+                encoded_content = base64.b64encode(content).decode('utf-8')
+                
+                blob_res = requests.post(
+                    f'https://api.github.com/repos/{repo}/git/blobs',
+                    headers=headers,
+                    json={'content': encoded_content, 'encoding': 'base64'}
+                )
+                
+                if blob_res.status_code == 201:
+                    tree_items.append({
+                        "path": file_info.filename,
+                        "mode": "100644",
+                        "type": "blob",
+                        "sha": blob_res.json()['sha']
+                    })
+                    files_processed += 1
+
+        if not tree_items:
+            return jsonify({'error': 'No files found in zip'}), 400
+
+        # 4. Create a new Tree
+        tree_res = requests.post(
+            f'https://api.github.com/repos/{repo}/git/trees',
+            headers=headers,
+            json={'base_tree': base_sha, 'tree': tree_items}
+        )
+        new_tree_sha = tree_res.json()['sha']
+
+        # 5. Create a Commit
+        commit_res = requests.post(
+            f'https://api.github.com/repos/{repo}/git/commits',
+            headers=headers,
+            json={
+                'message': f'Upload zip archive ({files_processed} files) - {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+                'tree': new_tree_sha,
+                'parents': [base_sha]
+            }
+        )
+        new_commit_sha = commit_res.json()['sha']
+
+        # 6. Update Reference
+        patch_res = requests.patch(
+            f'https://api.github.com/repos/{repo}/git/refs/heads/{branch}',
+            headers=headers,
+            json={'sha': new_commit_sha}
+        )
+
+        return jsonify({'success': True, 'files_count': files_processed})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/download/<path:repo>/<branch>')
 def download_repo(repo, branch):
     if 'oauth_token' not in session:
@@ -367,6 +454,65 @@ def get_commits(repo, branch):
     headers = {'Authorization': f"token {session['oauth_token']}"}
     response = requests.get(f'https://api.github.com/repos/{repo}/commits?sha={branch}&per_page={per_page}', headers=headers)
     return jsonify(response.json())
+
+@app.route('/api/delete', methods=['POST'])
+def delete_file():
+    if 'oauth_token' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.json
+    headers = {'Authorization': f"token {session['oauth_token']}"}
+    
+    # GitHub requires the file SHA to delete it
+    payload = {
+        'message': f"Delete {data['filepath']}",
+        'sha': data['sha'],
+        'branch': data['branch']
+    }
+    
+    url = f"https://api.github.com/repos/{data['repo']}/contents/{data['filepath']}"
+    response = requests.delete(url, headers=headers, json=payload)
+    
+    if response.status_code == 200:
+        return jsonify({'success': True})
+    return jsonify({'error': response.json()}), response.status_code
+
+@app.route('/api/rename', methods=['POST'])
+def rename_file():
+    if 'oauth_token' not in session:
+        return jsonify({'error': 'Not authenticated'}), 401
+    
+    data = request.json
+    headers = {'Authorization': f"token {session['oauth_token']}"}
+    repo = data['repo']
+    branch = data['branch']
+    
+    # 1. Get the original file content
+    get_url = f"https://api.github.com/repos/{repo}/contents/{data['old_path']}?ref={branch}"
+    file_data = requests.get(get_url, headers=headers).json()
+    
+    # 2. Create the file at the new path
+    create_payload = {
+        'message': f"Rename {data['old_path']} to {data['new_path']}",
+        'content': file_data['content'],
+        'branch': branch
+    }
+    create_url = f"https://api.github.com/repos/{repo}/contents/{data['new_path']}"
+    create_res = requests.put(create_url, headers=headers, json=create_payload)
+    
+    if create_res.status_code not in [200, 201]:
+        return jsonify({'error': 'Failed to create new file'}), 500
+
+    # 3. Delete the old file
+    delete_payload = {
+        'message': f"Cleanup after rename: {data['old_path']}",
+        'sha': data['sha'],
+        'branch': branch
+    }
+    delete_url = f"https://api.github.com/repos/{repo}/contents/{data['old_path']}"
+    requests.delete(delete_url, headers=headers, json=delete_payload)
+    
+    return jsonify({'success': True})
 
 @app.route('/api/commit-at-time/<path:repo>/<branch>/<timestamp>')
 def get_commit_at_time(repo, branch, timestamp):
@@ -414,6 +560,7 @@ def get_tree_at_commit(repo, commit_sha):
     # Get recursive tree
     tree_response = requests.get(f'https://api.github.com/repos/{repo}/git/trees/{tree_sha}?recursive=1', headers=headers)
     return jsonify(tree_response.json())
+        
 
 @app.route('/api/file-at-commit', methods=['POST'])
 def get_file_at_commit():
