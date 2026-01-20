@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Pandoc Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+
+        #menubar {
+            background: #2d2d30;
+            padding: 10px 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid #3e3e42;
+            flex-wrap: wrap;
+        }
+
+        #product-name {
+            margin-right: 20px;
+            font-size: 20px;
+            font-weight: 700;
+            color: #4ec9b0;
+            letter-spacing: 0.5px;
+        }
+
+        #repo-info {
+            margin-left: auto;
+            color: #888;
+            font-size: 12px;
+        }
+
+        button {
+            background: #0e639c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background: #1177bb;
+        }
+
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        #container {
+            display: flex;
+            height: calc(100vh - 50px);
+        }
+
+        #file-explorer {
+            width: 250px;
+            min-width: 150px;
+            background: #252526;
+            border-right: 1px solid #3e3e42;
+            overflow-y: auto;
+            padding: 10px;
+            resize: horizontal;
+        }
+
+        #editor-pane {
+            flex: 1;
+            min-width: 200px;
+            display: flex;
+            flex-direction: column;
+            background: #1e1e1e;
+            resize: horizontal;
+            overflow: hidden;
+        }
+
+        #editor-header {
+            background: #2d2d30;
+            padding: 10px 15px;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #editor {
+            flex: 1;
+            padding: 15px;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            border: none;
+            outline: none;
+            resize: none;
+            overflow-y: auto;
+        }
+
+        #preview-pane {
+            width: 50%;
+            min-width: 200px;
+            background: #252526;
+            border-left: 1px solid #3e3e42;
+            display: flex;
+            flex-direction: column;
+            resize: horizontal;
+            overflow: hidden;
+        }
+
+        #preview-header {
+            background: #2d2d30;
+            padding: 10px 15px;
+            border-bottom: 1px solid #3e3e42;
+            font-weight: 600;
+        }
+
+        #preview-content {
+            flex: 1;
+            background: white;
+        }
+
+        #preview-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .file-item {
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 3px;
+            margin: 2px 0;
+            user-select: none;
+        }
+
+        .file-item:hover {
+            background: #2a2d2e;
+        }
+
+        .file-item.active {
+            background: #094771;
+        }
+
+        .folder {
+            font-weight: 600;
+            color: #cccccc;
+        }
+
+        .file {
+            color: #9cdcfe;
+            padding-left: 20px;
+        }
+
+        #modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #2d2d30;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-content h2 {
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            background: #3c3c3c;
+            border: 1px solid #555;
+            color: #d4d4d4;
+            border-radius: 4px;
+        }
+
+        .repo-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #555;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+
+        .repo-item {
+            padding: 10px;
+            border-bottom: 1px solid #3e3e42;
+            cursor: pointer;
+        }
+
+        .repo-item:hover {
+            background: #2a2d2e;
+        }
+
+        .repo-item:last-child {
+            border-bottom: none;
+        }
+
+        #binary-view {
+            display: none;
+            padding: 20px;
+            text-align: center;
+            color: #888;
+            overflow: auto;
+            flex: 1;
+        }
+
+        #binary-view img {
+            max-width: 100%;
+            max-height: 80vh;
+            object-fit: contain;
+        }
+
+        #binary-view embed {
+            width: 100%;
+            height: 100%;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        #repo-info {
+            margin-left: auto;
+            color: #888;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="menubar">
+        <div id="product-name">UnderLeaf</div>
+        <button id="new-project-btn">New Project</button>
+        <button id="new-file-btn" disabled>New File</button>
+        <button id="upload-file-btn" disabled>Upload File</button>
+        <button id="save-btn" disabled>Save (Ctrl+S)</button>
+        <button id="compile-btn" disabled>Compile to PDF</button>
+        <button id="version-history-btn" disabled>Version History</button>
+        <button id="download-btn" disabled>Download Repo</button>
+        <button id="share-btn" disabled>Share</button>
+        <span id="repo-info"></span>
+    </div>
+
+    <div id="container">
+        <div id="file-explorer">
+            <div id="file-tree"></div>
+        </div>
+
+        <div id="editor-pane">
+            <div id="editor-header">
+                <span id="current-file">No file selected</span>
+                <span id="save-status"></span>
+            </div>
+            <textarea id="editor" placeholder="Select a file to edit..."></textarea>
+            <div id="binary-view"></div>
+        </div>
+
+        <div id="preview-pane">
+            <div id="preview-header">PDF Preview</div>
+            <div id="preview-content">
+                <iframe id="preview-iframe"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal">
+        <div class="modal-content" id="modal-body"></div>
+    </div>
+
+    <script>
+        let currentRepo = null;
+        let currentBranch = null;
+        let currentCommit = null; // Track if we're viewing a specific commit
+        let isHistoryMode = false; // Track if in history browsing mode
+        let currentFile = null;
+        let currentFileSha = null;
+        let unsavedChanges = false;
+        let isTextFile = true;
+
+        const editor = document.getElementById('editor');
+        const binaryView = document.getElementById('binary-view');
+        const fileTree = document.getElementById('file-tree');
+        const currentFileSpan = document.getElementById('current-file');
+        const saveStatus = document.getElementById('save-status');
+        const repoInfo = document.getElementById('repo-info');
+        const modal = document.getElementById('modal');
+
+        // Event listeners
+        document.getElementById('new-project-btn').addEventListener('click', showProjectModal);
+        document.getElementById('new-file-btn').addEventListener('click', showNewFileModal);
+        document.getElementById('upload-file-btn').addEventListener('click', showUploadModal);
+        document.getElementById('save-btn').addEventListener('click', saveFile);
+        document.getElementById('compile-btn').addEventListener('click', compileFile);
+        document.getElementById('version-history-btn').addEventListener('click', showVersionHistory);
+        document.getElementById('download-btn').addEventListener('click', downloadRepo);
+        document.getElementById('share-btn').addEventListener('click', shareRepo);
+
+        editor.addEventListener('input', () => {
+            unsavedChanges = true;
+            updateSaveStatus();
+            // Auto-compile after 2 seconds of no typing
+            clearTimeout(window.autoCompileTimeout);
+            window.autoCompileTimeout = setTimeout(() => {
+                if (currentFile && isTextFile) {
+                    autoCompile();
+                }
+            }, 2000);
+        });
+
+        // Ctrl+S to save
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                if (currentFile && isTextFile) {
+                    saveFile();
+                }
+            }
+        });
+
+        function showModal(content) {
+            document.getElementById('modal-body').innerHTML = content;
+            modal.classList.add('show');
+        }
+
+        function closeModal() {
+            modal.classList.remove('show');
+        }
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        async function showProjectModal() {
+            const html = `
+                <h2>Open Repository</h2>
+                <div class="form-group">
+                    <label>Search your repositories:</label>
+                    <input type="text" id="repo-search" placeholder="Search repositories..." oninput="filterRepos()">
+                </div>
+                <div class="form-group">
+                    <label>Choose from your repositories:</label>
+                    <div class="repo-list" id="repo-list">Loading...</div>
+                </div>
+                <div class="form-group">
+                    <label>Or enter repository URL:</label>
+                    <input type="text" id="repo-url" placeholder="username/repository">
+                </div>
+                <div class="button-group">
+                    <button onclick="loadSelectedRepo()">Open</button>
+                    <button onclick="closeModal()">Cancel</button>
+                </div>
+            `;
+            showModal(html);
+            
+            // Load all user repos
+            await loadAllRepos();
+        }
+
+        let allRepos = [];
+
+        async function loadAllRepos() {
+            const repoList = document.getElementById('repo-list');
+            repoList.innerHTML = 'Loading all repositories...';
+            
+            try {
+                allRepos = [];
+                let page = 1;
+                let hasMore = true;
+                
+                while (hasMore) {
+                    const response = await fetch(`/api/repos?page=${page}&per_page=100`);
+                    const repos = await response.json();
+                    
+                    if (repos.length === 0) {
+                        hasMore = false;
+                    } else {
+                        allRepos = allRepos.concat(repos);
+                        page++;
+                        repoList.innerHTML = `Loading repositories... (${allRepos.length} loaded)`;
+                    }
+                }
+                
+                displayRepos(allRepos);
+            } catch (error) {
+                repoList.innerHTML = 'Error loading repositories';
+            }
+        }
+
+        function displayRepos(repos) {
+            const repoList = document.getElementById('repo-list');
+            if (repos.length === 0) {
+                repoList.innerHTML = '<p style="padding: 10px; color: #888;">No repositories found</p>';
+                return;
+            }
+            
+            repoList.innerHTML = repos.map(repo => 
+                `<div class="repo-item" onclick="selectRepo('${repo.full_name}')">
+                    <strong>${repo.full_name}</strong>
+                    ${repo.private ? '<span style="color: #f48771;"> (Private)</span>' : ''}
+                    <br>
+                    <small style="color: #888;">${repo.description || 'No description'}</small>
+                </div>`
+            ).join('');
+        }
+
+        window.filterRepos = function() {
+            const searchTerm = document.getElementById('repo-search').value.toLowerCase();
+            
+            if (!searchTerm) {
+                displayRepos(allRepos);
+                return;
+            }
+            
+            const filtered = allRepos.filter(repo => 
+                repo.full_name.toLowerCase().includes(searchTerm) ||
+                (repo.description && repo.description.toLowerCase().includes(searchTerm))
+            );
+            
+            displayRepos(filtered);
+        };
+
+        window.selectRepo = function(repoName) {
+            document.getElementById('repo-url').value = repoName;
+        };
+
+        window.loadSelectedRepo = async function() {
+            const repoName = document.getElementById('repo-url').value.trim();
+            if (!repoName) {
+                alert('Please select or enter a repository');
+                return;
+            }
+
+            // Load branches
+            try {
+                const response = await fetch(`/api/branches/${repoName}`);
+                const branches = await response.json();
+                
+                const html = `
+                    <h2>Select Branch</h2>
+                    <div class="form-group">
+                        <label>Branch:</label>
+                        <select id="branch-select">
+                            ${branches.map(b => `<option value="${b.name}">${b.name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="button-group">
+                        <button onclick="openRepo('${repoName}')">Open</button>
+                        <button onclick="closeModal()">Cancel</button>
+                    </div>
+                `;
+                showModal(html);
+            } catch (error) {
+                alert('Error loading branches: ' + error.message);
+            }
+        };
+
+        window.openRepo = async function(repoName) {
+            const branch = document.getElementById('branch-select').value;
+            currentRepo = repoName;
+            currentBranch = branch;
+            
+            repoInfo.textContent = `${repoName} (${branch})`;
+            
+            // Enable buttons
+            document.getElementById('new-file-btn').disabled = false;
+            document.getElementById('upload-file-btn').disabled = false;
+            document.getElementById('version-history-btn').disabled = false;
+            document.getElementById('download-btn').disabled = false;
+            document.getElementById('share-btn').disabled = false;
+            
+            closeModal();
+            await loadFileTree();
+        };
+
+        async function loadFileTree() {
+            try {
+                const response = await fetch(`/api/tree/${currentRepo}/${currentBranch}`);
+                const data = await response.json();
+                
+                fileTree.innerHTML = '';
+                
+                data.tree.forEach(item => {
+                    if (item.type === 'blob') {
+                        const div = document.createElement('div');
+                        div.className = 'file-item file';
+                        div.textContent = item.path;
+                        div.onclick = () => openFile(item.path);
+                        fileTree.appendChild(div);
+                    }
+                });
+            } catch (error) {
+                fileTree.innerHTML = 'Error loading files';
+            }
+        }
+
+        async function openFile(filepath) {
+            // Re-enable editor if coming back from history mode
+            if (!isHistoryMode) {
+                editor.disabled = false;
+            }
+            
+            try {
+                const response = await fetch('/api/file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        repo: currentRepo,
+                        branch: currentBranch,
+                        filepath: filepath
+                    })
+                });
+                const data = await response.json();
+                
+                currentFile = filepath;
+                currentFileSha = data.sha;
+                currentFileSpan.textContent = filepath;
+                
+                if (data.type === 'binary') {
+                    isTextFile = false;
+                    editor.style.display = 'none';
+                    binaryView.style.display = 'flex';
+                    binaryView.style.flexDirection = 'column';
+                    
+                    // Check file type and render appropriately
+                    const ext = filepath.split('.').pop().toLowerCase();
+                    console.log('File extension:', ext);
+                    console.log('Data type:', data.type);
+                    
+                    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp', 'webp'].includes(ext)) {
+                        binaryView.innerHTML = `<img src="data:image/${ext};base64,${data.content}" alt="${filepath}" style="max-width: 100%; max-height: 600px;">`;
+                    } else if (ext === 'pdf') {
+                        binaryView.innerHTML = `<embed src="data:application/pdf;base64,${data.content}" type="application/pdf" width="100%" height="100%">`;
+                    } else {
+                        binaryView.innerHTML = '<p>Binary file (cannot be edited)</p>';
+                    }
+                    
+                    document.getElementById('save-btn').disabled = true;
+                    document.getElementById('compile-btn').disabled = true;
+                } else {
+                    isTextFile = true;
+                    binaryView.style.display = 'none';
+                    editor.style.display = 'block';
+                    editor.value = data.content;
+                    unsavedChanges = false;
+                    
+                    document.getElementById('save-btn').disabled = false;
+                    document.getElementById('compile-btn').disabled = false;
+                }
+                
+                updateSaveStatus();
+                
+                // Highlight active file
+                document.querySelectorAll('.file-item').forEach(item => {
+                    item.classList.remove('active');
+                    if (item.textContent === filepath) {
+                        item.classList.add('active');
+                    }
+                });
+            } catch (error) {
+                alert('Error opening file: ' + error.message);
+            }
+        }
+
+        async function saveFile() {
+            if (!currentFile || !isTextFile) return;
+            
+            try {
+                const response = await fetch('/api/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        repo: currentRepo,
+                        branch: currentBranch,
+                        filepath: currentFile,
+                        content: editor.value,
+                        sha: currentFileSha
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentFileSha = data.sha;
+                    unsavedChanges = false;
+                    updateSaveStatus();
+                } else {
+                    alert('Error saving file: ' + JSON.stringify(data.error));
+                }
+            } catch (error) {
+                alert('Error saving file: ' + error.message);
+            }
+        }
+
+        async function compileFile() {
+            if (!currentFile) return;
+            
+            if (!isTextFile) {
+                alert('Cannot compile binary files');
+                return;
+            }
+            
+            if (unsavedChanges) {
+                if (confirm('You have unsaved changes. Save before compiling?')) {
+                    await saveFile();
+                }
+            }
+            
+            await performCompile();
+        }
+
+        async function autoCompile() {
+            if (!currentFile || !isTextFile) return;
+            
+            // Auto-save first
+            await saveFile();
+            
+            // Then compile
+            await performCompile();
+        }
+
+        async function performCompile() {
+            try {
+                saveStatus.textContent = 'Compiling...';
+                
+                const response = await fetch('/api/compile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        repo: currentRepo,
+                        branch: currentBranch,
+                        filepath: currentFile
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const iframe = document.getElementById('preview-iframe');
+                    iframe.src = 'data:application/pdf;base64,' + data.pdf;
+                    saveStatus.textContent = 'Compiled successfully';
+                    setTimeout(() => updateSaveStatus(), 3000);
+                } else {
+                    alert('Compilation error: ' + data.error);
+                    saveStatus.textContent = '';
+                }
+            } catch (error) {
+                alert('Error compiling: ' + error.message);
+                saveStatus.textContent = '';
+            }
+        }
+
+        function showNewFileModal() {
+            const html = `
+                <h2>Create New File</h2>
+                <div class="form-group">
+                    <label>Filename (with extension):</label>
+                    <input type="text" id="new-filename" placeholder="document.md">
+                </div>
+                <div class="button-group">
+                    <button onclick="createNewFile()">Create</button>
+                    <button onclick="closeModal()">Cancel</button>
+                </div>
+            `;
+            showModal(html);
+        }
+
+        function showUploadModal() {
+            const html = `
+                <h2>Upload File</h2>
+                <div class="form-group">
+                    <label>Select file to upload:</label>
+                    <input type="file" id="upload-input" multiple>
+                </div>
+                <div class="button-group">
+                    <button onclick="uploadFiles()">Upload</button>
+                    <button onclick="closeModal()">Cancel</button>
+                </div>
+            `;
+            showModal(html);
+        }
+
+        window.createNewFile = async function() {
+            const filename = document.getElementById('new-filename').value.trim();
+            if (!filename) {
+                alert('Please enter a filename');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        repo: currentRepo,
+                        branch: currentBranch,
+                        filepath: filename,
+                        content: ''
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    closeModal();
+                    await loadFileTree();
+                    await openFile(filename);
+                } else {
+                    alert('Error creating file: ' + JSON.stringify(data.error));
+                }
+            } catch (error) {
+                alert('Error creating file: ' + error.message);
+            }
+        };
+
+        window.uploadFiles = async function() {
+            const input = document.getElementById('upload-input');
+            const files = input.files;
+            
+            if (!files || files.length === 0) {
+                alert('Please select at least one file');
+                return;
+            }
+
+            for (let file of files) {
+                try {
+                    const content = await readFileAsBase64(file);
+                    
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            repo: currentRepo,
+                            branch: currentBranch,
+                            filepath: file.name,
+                            content: content
+                        })
+                    });
+
+                    const data = await response.json();
+
+                    if (!data.success) {
+                        alert(`Error uploading ${file.name}: ` + JSON.stringify(data.error));
+                    }
+                } catch (error) {
+                    alert(`Error uploading ${file.name}: ` + error.message);
+                }
+            }
+
+            closeModal();
+            await loadFileTree();
+            alert('Upload complete!');
+        };
+
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const base64 = reader.result.split(',')[1];
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function downloadRepo() {
+            try {
+                const response = await fetch(`/api/download/${currentRepo}/${currentBranch}`);
+                const data = await response.json();
+                window.open(data.url, '_blank');
+            } catch (error) {
+                alert('Error downloading: ' + error.message);
+            }
+        }
+
+        async function showVersionHistory() {
+            try {
+                // Get the first commit to show repo start date
+                const response = await fetch(`/api/commits/${currentRepo}/${currentBranch}?per_page=100`);
+                const commits = await response.json();
+                
+                if (commits.length === 0) {
+                    alert('No commits found');
+                    return;
+                }
+                
+                // Get the oldest commit date (repo started)
+                const oldestCommit = commits[commits.length - 1];
+                const repoStartDate = new Date(oldestCommit.commit.author.date);
+                const repoStartStr = repoStartDate.toISOString().slice(0, 16); // Format for datetime-local
+                
+                // Get current date/time
+                const now = new Date().toISOString().slice(0, 16);
+                
+                const html = `
+                    <h2>Version History</h2>
+                    <p>Repository started: ${repoStartDate.toLocaleString()}</p>
+                    <div class="form-group">
+                        <label>Select a date and time to view:</label>
+                        <input type="datetime-local" id="history-datetime" 
+                               min="${repoStartStr}" 
+                               max="${now}" 
+                               value="${now}">
+                    </div>
+                    <div class="button-group">
+                        <button onclick="loadCommitAtTime()">View This Version</button>
+                        ${isHistoryMode ? '<button onclick="returnToCurrentBranch()">Return to Current Branch</button>' : ''}
+                        <button onclick="closeModal()">Cancel</button>
+                    </div>
+                `;
+                showModal(html);
+            } catch (error) {
+                alert('Error loading version history: ' + error.message);
+            }
+        }
+
+        window.loadCommitAtTime = async function() {
+            const datetime = document.getElementById('history-datetime').value;
+            if (!datetime) {
+                alert('Please select a date and time');
+                return;
+            }
+            
+            const selectedDate = new Date(datetime);
+            
+            try {
+                // Get commits up to the selected date
+                const response = await fetch(`/api/commit-at-time/${currentRepo}/${currentBranch}/${selectedDate.toISOString()}`);
+                const data = await response.json();
+                
+                if (!data.commit) {
+                    alert('No commits found before this date');
+                    return;
+                }
+                
+                currentCommit = data.commit.sha;
+                isHistoryMode = true;
+                
+                const commitDate = new Date(data.commit.commit.author.date);
+                
+                // Update UI to show we're in history mode
+                repoInfo.textContent = `${currentRepo} (${currentBranch}) - Viewing: ${commitDate.toLocaleString()}`;
+                repoInfo.style.color = '#f48771';
+                
+                // Disable editing features
+                document.getElementById('new-file-btn').disabled = true;
+                document.getElementById('upload-file-btn').disabled = true;
+                document.getElementById('save-btn').disabled = true;
+                
+                closeModal();
+                await loadFileTreeAtCommit();
+            } catch (error) {
+                alert('Error loading commit: ' + error.message);
+            }
+        };
+
+        window.returnToCurrentBranch = async function() {
+            currentCommit = null;
+            isHistoryMode = false;
+            
+            // Reset UI
+            repoInfo.textContent = `${currentRepo} (${currentBranch})`;
+            repoInfo.style.color = '#888';
+            
+            // Re-enable editing features
+            document.getElementById('new-file-btn').disabled = false;
+            document.getElementById('upload-file-btn').disabled = false;
+            document.getElementById('save-btn').disabled = false;
+            
+            closeModal();
+            await loadFileTree();
+        };
+
+        async function loadFileTreeAtCommit() {
+            try {
+                const response = await fetch(`/api/tree-at-commit/${currentRepo}/${currentCommit}`);
+                const data = await response.json();
+                
+                fileTree.innerHTML = '';
+                
+                data.tree.forEach(item => {
+                    if (item.type === 'blob') {
+                        const div = document.createElement('div');
+                        div.className = 'file-item file';
+                        div.textContent = item.path;
+                        div.onclick = () => openFileAtCommit(item.path);
+                        fileTree.appendChild(div);
+                    }
+                });
+            } catch (error) {
+                fileTree.innerHTML = 'Error loading files';
+            }
+        }
+
+        async function openFileAtCommit(filepath) {
+            try {
+                const response = await fetch('/api/file-at-commit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        repo: currentRepo,
+                        commit: currentCommit,
+                        filepath: filepath
+                    })
+                });
+                const data = await response.json();
+                
+                currentFile = filepath;
+                currentFileSha = data.sha;
+                currentFileSpan.textContent = filepath + ' (read-only)';
+                
+                if (data.type === 'binary') {
+                    isTextFile = false;
+                    editor.style.display = 'none';
+                    binaryView.style.display = 'flex';
+                    binaryView.style.flexDirection = 'column';
+                    
+                    const ext = filepath.split('.').pop().toLowerCase();
+                    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp', 'webp'].includes(ext)) {
+                        binaryView.innerHTML = `<img src="data:image/${ext};base64,${data.content}" alt="${filepath}" style="max-width: 100%; max-height: 600px;">`;
+                    } else if (ext === 'pdf') {
+                        binaryView.innerHTML = `<embed src="data:application/pdf;base64,${data.content}" type="application/pdf" width="100%" height="100%">`;
+                    } else {
+                        binaryView.innerHTML = '<p>Binary file (cannot be edited)</p>';
+                    }
+                } else {
+                    isTextFile = true;
+                    binaryView.style.display = 'none';
+                    editor.style.display = 'block';
+                    editor.value = data.content;
+                    editor.disabled = true; // Read-only in history mode
+                    unsavedChanges = false;
+                }
+                
+                document.getElementById('compile-btn').disabled = !isTextFile;
+                
+                // Highlight active file
+                document.querySelectorAll('.file-item').forEach(item => {
+                    item.classList.remove('active');
+                    if (item.textContent === filepath) {
+                        item.classList.add('active');
+                    }
+                });
+            } catch (error) {
+                alert('Error opening file: ' + error.message);
+            }
+        }
+
+        function updateSaveStatus() {
+            if (isHistoryMode) {
+                saveStatus.textContent = '📖 Read-only (viewing history)';
+                saveStatus.style.color = '#f48771';
+            } else if (unsavedChanges) {
+                saveStatus.textContent = '● Unsaved changes';
+                saveStatus.style.color = '#f48771';
+            } else {
+                saveStatus.textContent = '✓ Saved';
+                saveStatus.style.color = '#89d185';
+            }
+        }
+
+        function shareRepo() {
+            window.open(`https://github.com/${currentRepo}/settings/access`, '_blank');
+        }
+
+        // Initialize
+        showProjectModal();
+    </script>
+</body>
+</html>
