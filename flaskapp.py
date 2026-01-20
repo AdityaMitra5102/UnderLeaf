@@ -34,8 +34,8 @@ if os.name == 'nt':  # Windows
         print(f"MikTeX configuration skipped: {e}")
         pass  # MikTeX might not be installed or configured
 # GitHub OAuth settings
-CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID', 'Ov23liZ0MpNVP80jwhk9')
-CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', '6ccf4aa3c2034df974043025ed8de5fdb1b6bcf0')
+CLIENT_ID = os.environ.get('GITHUB_CLIENT_ID')
+CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET')
 
 AUTHORIZATION_BASE_URL = 'https://github.com/login/oauth/authorize'
 TOKEN_URL = 'https://github.com/login/oauth/access_token'
@@ -450,4 +450,5 @@ def logout():
     return redirect(url_for('login'))
 
 if __name__ == '__main__':
+
     app.run(debug=True, port=5000)
