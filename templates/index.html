@@ -526,6 +526,13 @@ monaco.languages.setMonarchTokensProvider('latex', {
 
         let allRepos = [];
 
+window.commitsInGitHub = function() {
+    if (currentRepo && currentBranch) {
+        window.open(`https://github.com/${currentRepo}/commits/${currentBranch}`, '_blank');
+    }
+};
+
+
 function openInGitHub() {
     if (currentRepo && currentBranch) {
         window.open(`https://github.com/${currentRepo}/tree/${currentBranch}`, '_blank');
@@ -898,7 +905,8 @@ window.triggerDeleteFromHeader = async function() {
                     body: JSON.stringify({
                         repo: currentRepo,
                         branch: currentBranch,
-                        filepath: currentFile
+                        filepath: currentFile,
+                        commit: isHistoryMode ? currentCommit : null  
                     })
                 });
                 
@@ -1075,6 +1083,7 @@ window.triggerDeleteFromHeader = async function() {
                     <div class="button-group">
                         <button onclick="loadCommitAtTime()">View This Version</button>
                         ${isHistoryMode ? '<button onclick="returnToCurrentBranch()">Return to Current Branch</button>' : ''}
+                        <button onclick="commitsInGitHub()">Version History</button>
                         <button onclick="closeModal()">Cancel</button>
                     </div>
                 `;
@@ -1102,10 +1111,17 @@ window.triggerDeleteFromHeader = async function() {
                     alert('No commits found before this date');
                     return;
                 }
-                currentFile = null;
-			currentFileSha = null;
-			document.getElementById('file-actions-header').style.display = 'none';
-			await saveFile();
+
+currentFile = null;
+currentFileSha = null;
+currentFileSpan.textContent = 'No file selected';
+document.getElementById('file-actions-header').style.display = 'none';
+if (monacoEditor) {
+  isProgrammaticChange = true;
+    monacoEditor.setValue('');
+  isProgrammaticChange = false;
+}
+
 
                 currentCommit = data.commit.sha;
                 isHistoryMode = true;
@@ -1145,6 +1161,16 @@ if (monacoEditor) {
     monacoEditor.updateOptions({ readOnly: false });
 }
             closeModal();
+            currentFile = null;
+currentFileSha = null;
+currentFileSpan.textContent = 'No file selected';
+document.getElementById('file-actions-header').style.display = 'none';
+if (monacoEditor) {
+  isProgrammaticChange = true;
+    monacoEditor.setValue('');
+  isProgrammaticChange = false;
+}
+
             await loadFileTree();
         };
 

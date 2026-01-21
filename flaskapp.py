@@ -305,6 +305,7 @@ def compile_file():
     repo = data['repo']
     branch = data['branch']
     filepath = data['filepath']
+    commit = data.get('commit')
     
     # Create temp directory
     temp_dir = tempfile.mkdtemp()
@@ -312,8 +313,17 @@ def compile_file():
     try:
         # Clone repository
         clone_url = f"https://{session['oauth_token']}@github.com/{repo}.git"
-        subprocess.run(['git', 'clone', '-b', branch, '--depth', '1', clone_url, temp_dir], 
-                      check=True, capture_output=True)
+        
+        if commit:
+            # Clone and checkout specific commit
+            subprocess.run(['git', 'clone', clone_url, temp_dir], 
+                          check=True, capture_output=True)
+            subprocess.run(['git', 'checkout', commit], 
+                          cwd=temp_dir, check=True, capture_output=True)
+        else:
+            # Clone specific branch
+            subprocess.run(['git', 'clone', '-b', branch, '--depth', '1', clone_url, temp_dir], 
+                          check=True, capture_output=True)
         
         # Full path to file
         file_path = os.path.join(temp_dir, filepath)
