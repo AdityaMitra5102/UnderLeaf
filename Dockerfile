@@ -23,4 +23,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run the application with gunicorn
-CMD gunicorn --bind 0.0.0.0:7860  flaskapp:app
+CMD gunicorn --timeout 600 --bind 0.0.0.0:7860 --workers=500 --threads=400  flaskapp:app
