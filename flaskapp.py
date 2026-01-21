@@ -17,7 +17,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 # Add session configuration for better reliability
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using HTTPS
+app.config['SESSION_COOKIE_SECURE'] = True  # Set to True if using HTTPS
 
 # Configure MikTeX on startup (Windows only)
 if os.name == 'nt':  # Windows
@@ -111,7 +111,11 @@ def get_branches(repo):
             # Create a README.md file to initialize the repo
             content_txt='''# 🍃 UnderLeaf
 
-This repository contains an UnderLeaf project. Visit [underleaf.pages.dev](https://underleaf.pages.dev) to start using it.
+This repository contains an UnderLeaf project. 
+
+If this is not your project, fork it to start editing it.
+
+Visit [underleaf.pages.dev](https://underleaf.pages.dev) to start using it.
             '''
             readme_content = base64.b64encode(content_txt.encode()).decode('utf-8')
             
