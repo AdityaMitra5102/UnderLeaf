@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Pandoc Editor</title>
+    <title>🍃 UnderLeaf</title>
     <style>
         * {
             margin: 0;
@@ -326,7 +326,7 @@
     <div class="menu-item delete" id="ctx-delete">🗑️ Delete</div>
 </div>
     <div id="menubar">
-        <div id="product-name">UnderLeaf</div>
+        <div id="product-name">🍃 UnderLeaf</div>
         <button id="new-project-btn">New Project</button>
         <button id="new-file-btn" disabled>New File</button>
         <button id="upload-file-btn" disabled>Upload File</button>
@@ -336,6 +336,7 @@
         <button id="version-history-btn" disabled>Version History</button>
         <button id="download-btn" disabled>Download Repo</button>
         <button id="share-btn" disabled>Share</button>
+        <button id="open-github-btn" disabled>Open in GitHub</button>
         <span id="repo-info"></span>
     </div>
 
@@ -399,6 +400,7 @@
         document.getElementById('download-btn').addEventListener('click', downloadRepo);
         document.getElementById('share-btn').addEventListener('click', shareRepo);
         document.getElementById('upload-zip-btn').addEventListener('click', showZipUploadModal);
+        document.getElementById('open-github-btn').addEventListener('click', openInGitHub);
 
 let monacoEditor;
 
@@ -470,17 +472,6 @@ monaco.languages.setMonarchTokensProvider('latex', {
     });
 });
 
-        editor.addEventListener('input', () => {
-            unsavedChanges = true;
-            updateSaveStatus();
-            // Auto-compile after 2 seconds of no typing
-            clearTimeout(window.autoCompileTimeout);
-            window.autoCompileTimeout = setTimeout(() => {
-                if (currentFile && isTextFile) {
-                    autoCompile();
-                }
-            }, 2000);
-        });
 
         // Ctrl+S to save
         document.addEventListener('keydown', (e) => {
@@ -523,6 +514,7 @@ monaco.languages.setMonarchTokensProvider('latex', {
                 <div class="button-group">
                     <button onclick="loadSelectedRepo()">Open</button>
                     <button onclick="closeModal()">Cancel</button>
+                    <button onclick="window.location.href='https://github.com/new';">New Repository</button>
                 </div>
             `;
             showModal(html);
@@ -533,6 +525,12 @@ monaco.languages.setMonarchTokensProvider('latex', {
 
         let allRepos = [];
 
+function openInGitHub() {
+    if (currentRepo && currentBranch) {
+        window.open(`https://github.com/${currentRepo}/tree/${currentBranch}`, '_blank');
+    }
+}
+      
         async function loadAllRepos() {
             const repoList = document.getElementById('repo-list');
             repoList.innerHTML = 'Loading all repositories...';
@@ -643,6 +641,7 @@ monaco.languages.setMonarchTokensProvider('latex', {
             document.getElementById('download-btn').disabled = false;
             document.getElementById('share-btn').disabled = false;
             document.getElementById('upload-zip-btn').disabled = false;
+            document.getElementById('open-github-btn').disabled = false;
             
             closeModal();
             await loadFileTree();
@@ -826,6 +825,7 @@ if (monacoEditor) {
                     currentFileSha = data.sha;
                     unsavedChanges = false;
                     updateSaveStatus();
+                    await performCompile();
                 } else {
                     alert('Error saving file: ' + JSON.stringify(data.error));
                 }
@@ -877,10 +877,10 @@ window.triggerDeleteFromHeader = async function() {
             if (!currentFile || !isTextFile) return;
             
             // Auto-save first
-            await saveFile();
+            //await saveFile();
             
             // Then compile
-            await performCompile();
+            //await performCompile();
         }
 
         async function performCompile() {

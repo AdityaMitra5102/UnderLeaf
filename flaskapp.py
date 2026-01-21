@@ -42,7 +42,7 @@ CLIENT_SECRET = os.environ.get('GITHUB_CLIENT_SECRET', '06d97b6b9b83225862dfe782
 
 AUTHORIZATION_BASE_URL = 'https://github.com/login/oauth/authorize'
 TOKEN_URL = 'https://github.com/login/oauth/access_token'
-REDIRECT_URI  = os.environ.get('REDIRECT_URI', 'http://localhost:5000/callback')
+REDIRECT_URI  = os.environ.get('REDIRECT_URI', 'https://cryptane-underleaf.hf.space/callback')
 
 @app.route('/')
 def index():
@@ -101,7 +101,37 @@ def get_branches(repo):
     
     headers = {'Authorization': f"token {session['oauth_token']}"}
     response = requests.get(f'https://api.github.com/repos/{repo}/branches', headers=headers)
-    return jsonify(response.json())
+    
+    branches = response.json()
+    
+    # If repo has no branches, create main branch
+    if isinstance(branches, list) and len(branches) == 0:
+        # Create an initial commit to main branch
+        try:
+            # Create a README.md file to initialize the repo
+            content_txt='''# 🍃 UnderLeaf
+
+This repository contains an UnderLeaf project. Visit [underleaf.pages.dev](https://underleaf.pages.dev) to start using it.
+            '''
+            readme_content = base64.b64encode(content_txt.encode()).decode('utf-8')
+            
+            create_response = requests.put(
+                f'https://api.github.com/repos/{repo}/contents/README.md',
+                headers=headers,
+                json={
+                    'message': 'Initial commit',
+                    'content': readme_content,
+                    'branch': 'main'
+                }
+            )
+            
+            if create_response.status_code == 201:
+                # Return the newly created main branch
+                return jsonify([{'name': 'main'}])
+        except Exception as e:
+            print(f"Error creating main branch: {e}")
+    
+    return jsonify(branches)
 
 @app.route('/api/tree/<path:repo>/<branch>')
 def get_tree(repo, branch):
