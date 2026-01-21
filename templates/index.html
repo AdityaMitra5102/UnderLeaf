@@ -1070,7 +1070,7 @@ window.triggerDeleteFromHeader = async function() {
                         <input type="datetime-local" id="history-datetime" 
                                min="${repoStartStr}" 
                                max="${now}" 
-                               value="${now}">
+                               value="${repoStartStr}">
                     </div>
                     <div class="button-group">
                         <button onclick="loadCommitAtTime()">View This Version</button>
@@ -1102,7 +1102,11 @@ window.triggerDeleteFromHeader = async function() {
                     alert('No commits found before this date');
                     return;
                 }
-                
+                currentFile = null;
+			currentFileSha = null;
+			document.getElementById('file-actions-header').style.display = 'none';
+			await saveFile();
+
                 currentCommit = data.commit.sha;
                 isHistoryMode = true;
                 
