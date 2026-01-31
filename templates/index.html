@@ -121,12 +121,19 @@
         }
 
         #preview-header {
-            background: #2d2d30;
-            padding: 10px 15px;
-            border-bottom: 1px solid #3e3e42;
-            font-weight: 600;
-        }
+    background: #2d2d30;
+    padding: 10px 15px;
+    border-bottom: 1px solid #3e3e42;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
 
+#download-pdf-btn {
+    padding: 5px 12px;
+    font-size: 13px;
+}
         #preview-content {
             flex: 1;
             background: white;
@@ -361,7 +368,10 @@
         </div>
 
         <div id="preview-pane">
-            <div id="preview-header">PDF Preview</div>
+            <div id="preview-header">
+                <span>PDF Preview</span>
+            <button id="download-pdf-btn" disabled style="margin-left: auto;">Download PDF</button>
+            </div>
             <div id="preview-content">
                 <iframe id="preview-iframe"></iframe>
             </div>
@@ -401,6 +411,19 @@
         document.getElementById('share-btn').addEventListener('click', shareRepo);
         document.getElementById('upload-zip-btn').addEventListener('click', showZipUploadModal);
         document.getElementById('open-github-btn').addEventListener('click', openInGitHub);
+        // Add this near the top with other event listeners
+document.getElementById('download-pdf-btn').addEventListener('click', downloadPDF);
+
+// Add this function
+function downloadPDF() {
+    if (!window.currentPdfUrl) return;
+    
+    const link = document.createElement('a');
+    link.href = window.currentPdfUrl;
+    link.download = currentFile.replace(/\.[^/.]+$/, '') + '.pdf';
+    link.click();
+}
+
 
 let monacoEditor;
 let isProgrammaticChange = false;
@@ -525,6 +548,9 @@ monaco.languages.setMonarchTokensProvider('latex', {
         }
 
         let allRepos = [];
+
+
+
 
 window.commitsInGitHub = function() {
     if (currentRepo && currentBranch) {
@@ -913,11 +939,28 @@ window.triggerDeleteFromHeader = async function() {
                 const data = await response.json();
                 
                 if (data.success) {
-                    const iframe = document.getElementById('preview-iframe');
-                    iframe.src = 'data:application/pdf;base64,' + data.pdf;
-                    saveStatus.textContent = 'Compiled successfully';
-                    setTimeout(() => updateSaveStatus(), 3000);
-                } else {
+    const iframe = document.getElementById('preview-iframe');
+    
+    // Convert base64 to blob
+    const binaryString = atob(data.pdf);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    
+    // Revoke old blob URL if exists
+    if (window.currentPdfUrl) {
+        URL.revokeObjectURL(window.currentPdfUrl);
+    }
+    
+    // Create blob URL and set to iframe
+    window.currentPdfUrl = URL.createObjectURL(blob);
+    iframe.src = window.currentPdfUrl;
+    document.getElementById('download-pdf-btn').disabled = false;
+    saveStatus.textContent = 'Compiled successfully';
+    setTimeout(() => updateSaveStatus(), 3000);
+} else {
                     alert('Compilation error: ' + data.error);
                     saveStatus.textContent = '';
                 }
